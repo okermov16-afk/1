@@ -50,4 +50,19 @@ public final class CanonMap {
         boolean applied = table != null && table.length == 24 && n == 0 && face >= 0 && face <= 5;
         return applied ? (m | 0x100) : m;
     }
+
+    /**
+     * True if the variant has at least one quad for the meta, on any side. PortedBakedModel used to fall back to the
+     * base variant whenever the variant had no quads for the requested side, which drew foreign base quads next to
+     * doors/fences (the "ghost copy" of a door half).
+     */
+    public static boolean variantHasQuads(java.util.Map<Integer, ?> quads, int variant, int meta) {
+        int base = (variant * 16 + meta) * 64 + 32;
+        for (int side = 0; side <= 6; side++) {
+            if (quads.get(base + side) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

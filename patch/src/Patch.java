@@ -201,6 +201,45 @@ public class Patch {
         return cw.toByteArray();
     }
 
+    static final String PBM = "com/modelport/ported/PortedBakedModel";
+
+    static byte[] patchBakedModel(byte[] in) {
+        ClassReader cr = new ClassReader(in);
+        ClassNode cn = new ClassNode();
+        cr.accept(cn, 0);
+        MethodNode m = find(cn, "func_188616_a", "(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/EnumFacing;J)Ljava/util/List;");
+        int done = 0;
+        for (AbstractInsnNode i = m.instructions.getFirst(); i != null; i = i.getNext()) {
+            // pattern:  ALOAD 10 ; IFNONNULL L ; ILOAD 9 ; IFEQ L   (L = end of the fallback block)
+            if (i instanceof JumpInsnNode j1 && j1.getOpcode() == Opcodes.IFNONNULL) {
+                AbstractInsnNode a = j1.getPrevious();
+                AbstractInsnNode b = j1.getNext();
+                while (a instanceof LabelNode || a instanceof LineNumberNode || a instanceof FrameNode) a = a.getPrevious();
+                while (b instanceof LabelNode || b instanceof LineNumberNode || b instanceof FrameNode) b = b.getNext();
+                if (a != null && a.getOpcode() == Opcodes.ALOAD && ((VarInsnNode) a).var == 10
+                    && b != null && b.getOpcode() == Opcodes.ILOAD && ((VarInsnNode) b).var == 9
+                    && b.getNext() instanceof JumpInsnNode j2 && j2.getOpcode() == Opcodes.IFEQ) {
+                    InsnList add = new InsnList();
+                    add.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                    add.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "root", "L" + PBM + ";"));
+                    add.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "quads", "Ljava/util/Map;"));
+                    add.add(new VarInsnNode(Opcodes.ILOAD, 9));
+                    add.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                    add.add(new MethodInsnNode(Opcodes.INVOKESTATIC, CM, "variantHasQuads", "(Ljava/util/Map;II)Z", false));
+                    add.add(new JumpInsnNode(Opcodes.IFNE, j2.label));
+                    m.instructions.insert(j2, add);
+                    done++;
+                    break;
+                }
+            }
+        }
+        if (done != 1) throw new IllegalStateException("baked model patch applied " + done);
+        count++;
+        ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        cn.accept(cw);
+        return cw.toByteArray();
+    }
+
     public static void main(String[] a) throws Exception {
         String src = a[0], dst = a[1];
         List<String> helpers = new ArrayList<>(Arrays.asList(a).subList(2, a.length));
@@ -212,6 +251,7 @@ public class Patch {
                 else if (ze.getName().equals(BH + ".class")) data = patchProbe(data);
                 else if (ze.getName().equals(PP + ".class")) data = patchPlacement(data);
                 else if (ze.getName().equals(PC + ".class")) data = patchCapture(data);
+                else if (ze.getName().equals(PBM + ".class")) data = patchBakedModel(data);
                 ZipEntry ne = new ZipEntry(ze.getName());
                 ne.setTime(ze.getTime());
                 zo.putNextEntry(ne);
@@ -231,7 +271,7 @@ public class Patch {
                 }
             }
         }
-        if (count != 7) throw new IllegalStateException("patches " + count);
+        if (count != 8) throw new IllegalStateException("patches " + count);
         System.out.println("patched ok: " + count + " patch points");
     }
 }

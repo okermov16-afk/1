@@ -33,3 +33,11 @@ For blocks whose states have `canon != meta` (e.g. `furniture:doorbell`), `getMe
 states (pressed south -> pressed east, pressed west -> unpressed south, ...). `BlockPorted.func_176203_a` now decodes canon metas
 (inverse of getMetaFromState); every internal caller uses the private `stateByMeta` (the old body). Identity for `canon == meta`
 blocks and merge families. Verified with the real BlockPorted constructor (`RealCtor`): all states round-trip, click/tick keeps facing.
+
+## v5: ghost copy of door halves (PortedBakedModel.getQuads)
+`getQuads` fell back to the BASE variant whenever a neighbour-dependent variant had no quads for the requested side
+(`list == null && variant != 0`). A variant legitimately has quads only on some sides, so base quads of another
+orientation were drawn next to the real door: a flat one-sided "copy" of a door half (whole big face or only an edge).
+Now the fallback happens only when the variant has no quads at all (`CanonMap.variantHasQuads`).
+Verified on real library data of mcwdoors oak/spruce four-panel doors (`GhostTest`): 32 of 64 state/variant cases
+had foreign quads before, 0 after.
