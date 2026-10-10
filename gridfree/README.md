@@ -1,7 +1,13 @@
-# gridfree-1.1-connect-v2.jar
+# gridfree-1.1-connect-v3.jar  (v2 did nothing useful for the reported case; do not use it)
 
-Built from the user's gridfree-1.1-connect.jar. The only change: `gridfree.math.Move.arrange` (used by `/gf forcen`, `/gf for`, `/gf cen`)
-keeps its name and signature; its old body is now `arrangeOrig`, called through `gridfree.math.Forcen.arrange`.
-Behaviour differs only for `forcen` (centre + press) when the old code pressed against nothing (the centring step had rounded a
-leftover sideways offset into a column with no obstacle): the block is then put in the centre of its own cell and pressed once more.
-Test: `tests/Reg.java` (old vs new on 20000 random scenes: 0 changes where the old code pressed something, 291 fixed), `tests/Sim.java` (the lever at a fence post).
+Built from the user's original gridfree-1.1-connect.jar. Only `gridfree.math.Move.arrange` is wrapped (old body kept as `arrangeOrig`,
+called through `gridfree.math.Forcen.arrange`).
+
+Problem: `/gf forcen` centres the pressed block on the cell grid, not on what it presses against. A fence post shifted by 0.25
+(`/gf info`: shift -0.250 / 0.000) left the lever 0.25 beside the post axis.
+Change: after the old logic has pressed, forcen also centres the block on the pressed box (horizontal sideways axis only; block and push
+axis-aligned; accepted only if the block stays pressed on the same box at the same push-axis position and does not penetrate; otherwise the old result is kept).
+`for` and `cen` are untouched.
+
+Tests: `tests/Sim2.java` (the reported scene, old: x 0.000, new: x -0.250), `tests/Reg2.java` (40000 random scenes: modes 1/2 identical,
+forcen changes only to the box centre with all invariants, 0 violations).
