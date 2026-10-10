@@ -20,7 +20,7 @@ public final class Forcen {
                                   double d13, double d14, double d15, double d16,
                                   double[][] boxes, int n, int mode, int[] hit, double[] out) {
         boolean r = Move.arrangeOrig(d, d2, d3, d4, d5, d6, ax, ay, az, d7, d8, d9, d10, d11, d12, d13, d14, d15, d16, boxes, n, mode, hit, out);
-        if ((mode & 3) != 3 || !r || hit == null || hit.length == 0 || hit[0] < 0 || hit[0] >= n || boxes == null) {
+        if ((mode & 3) != 3 || hit == null || hit.length == 0 || hit[0] < 0 || hit[0] >= n || boxes == null) {
             return r;
         }
         if (!unit(ax, 0) || !unit(ay, 1) || !unit(az, 2)) {

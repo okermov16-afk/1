@@ -1,4 +1,4 @@
-# gridfree-1.1-connect-v3.jar  (v2 did nothing useful for the reported case; do not use it)
+# gridfree-1.1-connect-v4.jar (v2 and v3 are superseded; v3 skipped a lever that was already flush)
 
 Built from the user's original gridfree-1.1-connect.jar. Only `gridfree.math.Move.arrange` is wrapped (old body kept as `arrangeOrig`,
 called through `gridfree.math.Forcen.arrange`).
