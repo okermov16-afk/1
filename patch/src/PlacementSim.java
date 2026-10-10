@@ -241,6 +241,7 @@ public final class PlacementSim {
             for (String name : new java.util.ArrayList<String>(lib.names())) {
                 refresh(lib, lib.get(name));
             }
+            ReverseToggle.completeAll();
         } catch (Throwable t) {
             // best effort, stored tables stay as they were
         }

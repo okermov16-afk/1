@@ -47,3 +47,9 @@ The GUI item transform copied from the original item model (or the default one) 
 slot (large or off-centre models). `PortedBakedModel.handlePerspective` now passes its result through `ItemFit.fit`: the
 transformed mesh bounding box is checked against the slot square and, only if it does not fit, scaled/moved just enough.
 Icons that already fit, and every non-GUI view, are returned unchanged (`GuiFitTest`).
+
+## v7 — atypical click becomes the default toggle (`ReverseToggle`)
+Built on v6 (every v3–v6 fix is unchanged; the jar differs from v6 only in `PlacementSim.class` (one added call) and the new `ReverseToggle.class`).
+When a click is handled but no change was recorded and exactly one other library block turns into this state when clicked, the click is
+recorded as the way back (e.g. `scpnewblocksandstairs:opened_ap_door` -> `ap_door`). Runs at the end of the capture (same hook as the placement-table refresh),
+rewrites only changed block files, is idempotent and never invents a transition when the source is missing or ambiguous. Test: `tests/RTTest.java`.
