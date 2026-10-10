@@ -1,0 +1,244 @@
+{
+  "format": 1,
+  "rev": 12,
+  "reg": "scpnewblocksandstairs:opened_ap_door",
+  "sourceMod": "scpnewblocksandstairs",
+  "sourceHash": "0362e52e5f18545f003b86351fb32a28",
+  "capturedAt": 1791594500200,
+  "states": [
+    {
+      "meta": 2,
+      "canon": 2,
+      "beh": {
+        "clickHandled": true,
+        "clickGui": false,
+        "clickMeta": 2,
+        "clickBlock": "scpnewblocksandstairs:ap_door",
+        "clickSounds": [],
+        "ambient": [],
+        "clickThenMeta": -1,
+        "clickThenTicks": -1,
+        "clickThenSounds": [],
+        "powerMeta": -1,
+        "powerSounds": [],
+        "unpowerMeta": -1,
+        "unpowerSounds": []
+      },
+      "props": {
+        "facing": "north"
+      },
+      "mesh": "q2.quads",
+      "yaw": 0,
+      "collides": true,
+      "opaqueCube": false,
+      "fullCube": false,
+      "layer": "CUTOUT",
+      "light": 0,
+      "opacity": 0,
+      "boxes": [
+        [
+          0.0,
+          0.0,
+          0.187,
+          0.125,
+          1.0,
+          1.187
+        ]
+      ],
+      "select": []
+    },
+    {
+      "meta": 3,
+      "canon": 3,
+      "beh": {
+        "clickHandled": true,
+        "clickGui": false,
+        "clickMeta": 3,
+        "clickBlock": "scpnewblocksandstairs:ap_door",
+        "clickSounds": [],
+        "ambient": [],
+        "clickThenMeta": -1,
+        "clickThenTicks": -1,
+        "clickThenSounds": [],
+        "powerMeta": -1,
+        "powerSounds": [],
+        "unpowerMeta": -1,
+        "unpowerSounds": []
+      },
+      "props": {
+        "facing": "south"
+      },
+      "mesh": "q3.quads",
+      "yaw": 0,
+      "collides": true,
+      "opaqueCube": false,
+      "fullCube": false,
+      "layer": "CUTOUT",
+      "light": 0,
+      "opacity": 0,
+      "boxes": [
+        [
+          0.875,
+          0.0,
+          -0.187,
+          1.0,
+          1.0,
+          0.813
+        ]
+      ],
+      "select": []
+    },
+    {
+      "meta": 4,
+      "canon": 4,
+      "beh": {
+        "clickHandled": true,
+        "clickGui": false,
+        "clickMeta": 4,
+        "clickBlock": "scpnewblocksandstairs:ap_door",
+        "clickSounds": [],
+        "ambient": [],
+        "clickThenMeta": -1,
+        "clickThenTicks": -1,
+        "clickThenSounds": [],
+        "powerMeta": -1,
+        "powerSounds": [],
+        "unpowerMeta": -1,
+        "unpowerSounds": []
+      },
+      "props": {
+        "facing": "west"
+      },
+      "mesh": "q4.quads",
+      "yaw": 0,
+      "collides": true,
+      "opaqueCube": false,
+      "fullCube": false,
+      "layer": "CUTOUT",
+      "light": 0,
+      "opacity": 0,
+      "boxes": [
+        [
+          0.187,
+          0.0,
+          0.875,
+          1.187,
+          1.0,
+          1.0
+        ]
+      ],
+      "select": []
+    },
+    {
+      "meta": 5,
+      "canon": 5,
+      "beh": {
+        "clickHandled": true,
+        "clickGui": false,
+        "clickMeta": 5,
+        "clickBlock": "scpnewblocksandstairs:ap_door",
+        "clickSounds": [],
+        "ambient": [],
+        "clickThenMeta": -1,
+        "clickThenTicks": -1,
+        "clickThenSounds": [],
+        "powerMeta": -1,
+        "powerSounds": [],
+        "unpowerMeta": -1,
+        "unpowerSounds": []
+      },
+      "props": {
+        "facing": "east"
+      },
+      "mesh": "q5.quads",
+      "yaw": 0,
+      "collides": true,
+      "opaqueCube": false,
+      "fullCube": false,
+      "layer": "CUTOUT",
+      "light": 0,
+      "opacity": 0,
+      "boxes": [
+        [
+          -0.187,
+          0.0,
+          0.0,
+          0.813,
+          1.0,
+          0.125
+        ]
+      ],
+      "select": []
+    }
+  ],
+  "files": {
+    "s0.png": "6076d9e9a8b2943fb0bf0e13ef2f158ee31c3659faf8730ba4976df877d192af",
+    "s1.png": "cb4040f411d4ac75d3ede7c9d2fa112bbeb9036857ad954c058486b5a7ed19f0",
+    "s2.png": "82c470d36353bbc8808550193db560d0822d0075416026702ec2203aa0397d26",
+    "q2.quads": "a08d22e3bf0bd9f0fa1b2235a5590ae6ed841e2f9a0f7bcc6556c7f5cdb48b99",
+    "q3.quads": "4cce9c3cd60bea80712e42e1b26fb7925de0c4c249a9d48fd49ef7c4f678e694",
+    "q4.quads": "9635b24f3081350f43a8fdcf39d49b9fbccdbb744329515143b9664cf282d8ae",
+    "q5.quads": "3644548e4811035ef93a2aae7fa730553c9d5d6e53b18790fb7756cb5edc0351"
+  },
+  "displayName": "Opened AP Door",
+  "hardness": 1.0,
+  "resistance": 10.0,
+  "material": "iron",
+  "sound": "metal",
+  "placement": [
+    2,
+    5,
+    3,
+    4,
+    2,
+    5,
+    3,
+    4,
+    2,
+    5,
+    3,
+    4,
+    2,
+    5,
+    3,
+    4,
+    2,
+    5,
+    3,
+    4,
+    2,
+    5,
+    3,
+    4
+  ],
+  "itemGui3d": true,
+  "creativeHidden": true,
+  "ancestors": [
+    "net.mcreator.scpfr.block.BlockOpenedAPDoor$BlockCustom",
+    "interface net.minecraft.block.ITileEntityProvider"
+  ],
+  "sprites": {
+    "scpnewblocksandstairs:blocks/apdoorbottom": {
+      "n": 0,
+      "w": 16,
+      "h": 16,
+      "size": 16,
+      "foreign": false
+    },
+    "scpnewblocksandstairs:blocks/apdoortop": {
+      "n": 1,
+      "w": 16,
+      "h": 16,
+      "size": 16,
+      "foreign": false
+    },
+    "scpnewblocksandstairs:blocks/titaniumblock": {
+      "n": 2,
+      "w": 16,
+      "h": 16,
+      "size": 16,
+      "foreign": false
+    }
+  },
+  "notes": []
+}
