@@ -36,6 +36,20 @@ public class PlacementTest {
             System.out.printf("%-46s old=%-5s new=%-5s%n", c[0], okOld ? "as-expected" : "UNEXPECTED(" + fmt(o) + ")", okNew ? "OK" : "FAIL(" + fmt(n) + ")");
             if (!okNew) fail++;
         }
+        // CFM wall-mounted (BlockDoorBell/BlockLightSwitch logic): depends on the clicked face, needs a solid block behind
+        {
+            Block b = new MiniMC.WallMounted();
+            int[] expect = new int[24];
+            for (int f = 0; f < 6; f++) for (int i = 0; i < 4; i++) {
+                net.minecraft.util.EnumFacing ef = net.minecraft.util.EnumFacing.values()[f];
+                expect[f * 4 + i] = ef.hIndex() >= 0 ? ef.func_176734_d().hIndex() : 2;
+            }
+            int[] o = run(oldRig, b), n = run(newRig, b);
+            boolean okOld = o != null && Arrays.stream(o).allMatch(x -> x == 2);
+            boolean okNew = Arrays.equals(n, expect);
+            System.out.printf("%-46s old=%-5s new=%-5s%n", "CFM wall-mounted (doorbell/switch logic)", okOld ? "const-2(bug)" : "UNEXPECTED(" + fmt(o) + ")", okNew ? "OK" : "FAIL(" + fmt(n) + ")");
+            if (!okNew) fail++;
+        }
         // hang: must fall back to old values within ~LIMIT, and the block must not block the rest
         long t0 = System.currentTimeMillis();
         int[] n = run(newRig, new MiniMC.Hangs());

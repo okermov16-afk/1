@@ -52,4 +52,15 @@ public class MiniMC {
         public IBlockState getStateForPlacement(World w, BlockPos p, EnumFacing f, float x, float y, float z, int m, EntityLivingBase pl, EnumHand h) { return defaultState; }
         public int func_176201_c(IBlockState s) { return 99; }
     }
+
+    /** exact logic of cfm-rebuilt BlockDoorBell / BlockLightSwitch.getStateForPlacement */
+    public static class WallMounted extends Base {
+        public WallMounted() { super("t:wall"); }
+        public boolean func_176198_a(World w, BlockPos p, EnumFacing side) {
+            return side.hIndex() >= 0 && w.func_180495_p(p.func_177972_a(side.func_176734_d())).func_177230_c() != net.minecraft.init.Blocks.field_150350_a;
+        }
+        public IBlockState getStateForPlacement(World w, BlockPos p, EnumFacing f, float x, float y, float z, int m, EntityLivingBase pl, EnumHand h) {
+            return new St(this, func_176198_a(w, p, f) ? f.func_176734_d().hIndex() : 2);
+        }
+    }
 }

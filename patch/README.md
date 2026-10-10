@@ -3,10 +3,12 @@
 Replaces the original jar 1:1 (same file name, same mod version). 4 classes changed, 4 added, 194 untouched.
 
 ## Fixes
-1. **Placement tables ignored `onBlockPlacedBy`** (`PortedPlacement.probe` -> `PlacementSim`).
-   Many mods (CFM `BlockFurniture`) set the facing in `onBlockPlacedBy`; the old probe only called
-   `getStateForPlacement`, so the table was constant ("always north") and the block was only correct
-   for one player direction. The probe now also runs `onBlockPlacedBy` in the isolated `ProbeWorld`.
+1. **Placement tables were probed in a vacuum** (`PortedPlacement.probe` -> `PlacementSim`).
+   The old probe called `getStateForPlacement` in empty air, with no block that the player clicked on, and never ran
+   `onBlockPlacedBy`. Wall/side-mounted blocks (CFM `BlockDoorBell`/`BlockLightSwitch`:
+   `FACING = canPlaceBlockOnSide(..) ? face.getOpposite() : NORTH`) found no solid block behind them and returned
+   NORTH for every face and yaw -> constant table, correct for one direction only. Many blocks also set state in `onBlockPlacedBy`.
+   The probe now runs in the isolated `ProbeWorld` with a solid support block on the clicked side, then runs `onBlockPlacedBy`.
    Any failure of the extra step (exception, 5 s hang, block removed, bad meta) falls back to exactly
    the value the old probe produced. After a capture run, `PlacementSim.refreshAll()` rewrites the stored
    table of every library block whose fresh table differs (old entries were skipped before).

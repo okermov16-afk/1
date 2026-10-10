@@ -67,7 +67,7 @@ public final class PlacementSim {
                     if (!hung) {
                         int sim = -1;
                         try {
-                            sim = simulate(block, oldMeta >= 0 ? state : null, face, YAWS[i]);
+                            sim = simulate(block, face, YAWS[i]);
                         } catch (TimeoutException te) {
                             hung = true;
                             reset();
@@ -101,7 +101,7 @@ public final class PlacementSim {
         }
     }
 
-    private static int simulate(final Block block, final IBlockState given, final EnumFacing face, final float yaw) throws Exception {
+    private static int simulate(final Block block, final EnumFacing face, final float yaw) throws Exception {
         Method m = hookMethod();
         if (m == null) {
             return -1;
@@ -109,7 +109,7 @@ public final class PlacementSim {
         Future<Integer> f = executor().submit(new Callable<Integer>() {
             @Override
             public Integer call() throws Exception {
-                return PlacementSim.simulateNow(block, given, face, yaw);
+                return PlacementSim.simulateNow(block, face, yaw);
             }
         });
         try {
@@ -122,12 +122,14 @@ public final class PlacementSim {
         }
     }
 
-    private static int simulateNow(Block block, IBlockState given, EnumFacing face, float yaw) throws Exception {
+    private static int simulateNow(Block block, EnumFacing face, float yaw) throws Exception {
         if (world == null) {
             world = new ProbeWorld();
             placer = world.player();
         }
         BlockPos pos = ProbeWorld.center();
+        // the block the player clicked on: placement code of wall/side mounted blocks looks for it
+        BlockPos support = pos.func_177972_a(face.func_176734_d());
         IBlockState air = Blocks.field_150350_a.func_176223_P();
         placer.func_70012_b((double) pos.func_177958_n() + 0.5, (double) (pos.func_177956_o() - 1), (double) pos.func_177952_p() + 0.5, yaw, 0.0f);
         placer.field_70177_z = yaw;
@@ -136,10 +138,8 @@ public final class PlacementSim {
         placer.field_70125_A = 0.0f;
         try {
             world.func_180501_a(pos, air, 2);
-            IBlockState state = given;
-            if (state == null) {
-                state = block.getStateForPlacement((World) world, pos, face, 0.5f, 0.5f, 0.5f, 0, (EntityLivingBase) placer, EnumHand.MAIN_HAND);
-            }
+            world.func_180501_a(support, Blocks.field_150348_b.func_176223_P(), 2);
+            IBlockState state = block.getStateForPlacement((World) world, pos, face, 0.5f, 0.5f, 0.5f, 0, (EntityLivingBase) placer, EnumHand.MAIN_HAND);
             if (state == null || state.func_177230_c() != block) {
                 return -1;
             }
@@ -157,6 +157,7 @@ public final class PlacementSim {
         } finally {
             try {
                 world.func_180501_a(pos, air, 2);
+                world.func_180501_a(support, air, 2);
             } catch (Throwable t) {
                 // next block starts from a fresh world if this one is broken
                 world = null;
