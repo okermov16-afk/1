@@ -35,15 +35,8 @@ public final class CanonMap {
         return best >= 0 ? best : c;
     }
 
+    /** Partner blocks decode canon metas themselves (BlockPorted.func_176203_a), nothing to translate. */
     public static int partner(Object block, int c) {
-        if (block instanceof IPorted) {
-            IPorted p = (IPorted) block;
-            PortedBlock d = p.data();
-            if (d != null) {
-                Object fam = block instanceof BlockPorted ? ((BlockPorted) block).family() : null;
-                return fromCanon(d.states, fam, c);
-            }
-        }
         return c;
     }
 

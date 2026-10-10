@@ -30,6 +30,42 @@ public class Patch {
         ClassNode cn = new ClassNode();
         cr.accept(cn, 0);
 
+        // 0. getStateFromMeta must be the inverse of getMetaFromState (canon space).
+        //    The old body (indexed by the ported meta) becomes private stateByMeta, used by every internal caller.
+        String SD = "(I)Lnet/minecraft/block/state/IBlockState;";
+        MethodNode orig = find(cn, "func_176203_a", SD);
+        MethodNode copy = new MethodNode(Opcodes.ACC_PRIVATE, "stateByMeta", SD, null, null);
+        orig.accept(copy);
+        cn.methods.add(copy);
+        int redirected = 0;
+        for (MethodNode m : cn.methods) {
+            if (m == orig || m == copy) continue;
+            for (AbstractInsnNode i = m.instructions.getFirst(); i != null; i = i.getNext()) {
+                if (i instanceof MethodInsnNode mi && mi.getOpcode() == Opcodes.INVOKEVIRTUAL && mi.owner.equals(BP)
+                    && mi.name.equals("func_176203_a") && mi.desc.equals(SD)) {
+                    mi.setOpcode(Opcodes.INVOKESPECIAL);
+                    mi.name = "stateByMeta";
+                    redirected++;
+                }
+            }
+        }
+        if (redirected < 5) throw new IllegalStateException("redirected only " + redirected);
+        orig.instructions.clear();
+        orig.tryCatchBlocks.clear();
+        orig.localVariables = null;
+        InsnList nb = new InsnList();
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(statesAndFamily());
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, BP, "family", "Lcom/modelport/ported/MergeFamily;"));
+        nb.add(new VarInsnNode(Opcodes.ILOAD, 1));
+        nb.add(new MethodInsnNode(Opcodes.INVOKESTATIC, CM, "fromCanon", "(Ljava/util/List;Ljava/lang/Object;I)I", false));
+        nb.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, BP, "stateByMeta", SD, false));
+        nb.add(new InsnNode(Opcodes.ARETURN));
+        orig.instructions.add(nb);
+        count++;
+        System.out.println("redirected internal getStateFromMeta calls: " + redirected);
+
         // 1. targetMeta: family == null branch returns canon target translated to own meta
         MethodNode tm = find(cn, "targetMeta", "(IILjava/lang/String;)I");
         int done = 0;
@@ -195,7 +231,7 @@ public class Patch {
                 }
             }
         }
-        if (count != 6) throw new IllegalStateException("patches " + count);
+        if (count != 7) throw new IllegalStateException("patches " + count);
         System.out.println("patched ok: " + count + " patch points");
     }
 }

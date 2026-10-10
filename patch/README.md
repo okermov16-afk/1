@@ -26,3 +26,10 @@ Replaces the original jar 1:1 (same file name, same mod version). 4 classes chan
 * `RandomDiff`: 8000 random blocks, old vs new jar: 0 differences for all blocks where behaviour must not change.
 * `PartnerTest`, `PlacementTest` (CFM-like, PFM-like, throwing, hanging, removing, bad meta).
 Not verified: real Minecraft/Forge runtime (SRG name `func_180633_a`, real `ProbeWorld` with real mods).
+
+## v4: getStateFromMeta contract
+For blocks whose states have `canon != meta` (e.g. `furniture:doorbell`), `getMetaFromState` returns the original mod's meta
+(canon) but `getStateFromMeta` was indexed by the ported meta, so `getStateFromMeta(getMetaFromState(s)) != s` for 6 of 8 doorbell
+states (pressed south -> pressed east, pressed west -> unpressed south, ...). `BlockPorted.func_176203_a` now decodes canon metas
+(inverse of getMetaFromState); every internal caller uses the private `stateByMeta` (the old body). Identity for `canon == meta`
+blocks and merge families. Verified with the real BlockPorted constructor (`RealCtor`): all states round-trip, click/tick keeps facing.
