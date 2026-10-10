@@ -41,3 +41,9 @@ orientation were drawn next to the real door: a flat one-sided "copy" of a door 
 Now the fallback happens only when the variant has no quads at all (`CanonMap.variantHasQuads`).
 Verified on real library data of mcwdoors oak/spruce four-panel doors (`GhostTest`): 32 of 64 state/variant cases
 had foreign quads before, 0 after.
+
+## v6: GUI icons stay inside the inventory slot (ItemFit)
+The GUI item transform copied from the original item model (or the default one) could send parts of a model outside the
+slot (large or off-centre models). `PortedBakedModel.handlePerspective` now passes its result through `ItemFit.fit`: the
+transformed mesh bounding box is checked against the slot square and, only if it does not fit, scaled/moved just enough.
+Icons that already fit, and every non-GUI view, are returned unchanged (`GuiFitTest`).

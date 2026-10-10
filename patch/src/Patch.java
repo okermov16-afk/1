@@ -235,6 +235,35 @@ public class Patch {
         }
         if (done != 1) throw new IllegalStateException("baked model patch applied " + done);
         count++;
+
+        // GUI icon must stay inside its slot: handlePerspective -> ItemFit.fit(handlePerspective0(type), ...)
+        String HP = "(Lnet/minecraft/client/renderer/block/model/ItemCameraTransforms$TransformType;)Lorg/apache/commons/lang3/tuple/Pair;";
+        MethodNode hp = find(cn, "handlePerspective", HP);
+        MethodNode hp0 = new MethodNode(Opcodes.ACC_PRIVATE, "handlePerspective0", HP, null, null);
+        hp.accept(hp0);
+        cn.methods.add(hp0);
+        hp.instructions.clear();
+        hp.tryCatchBlocks.clear();
+        hp.localVariables = null;
+        InsnList nb = new InsnList();
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        nb.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, PBM, "handlePerspective0", HP, false));
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 1));
+        nb.add(new MethodInsnNode(Opcodes.INVOKEVIRTUAL, "net/minecraft/client/renderer/block/model/ItemCameraTransforms$TransformType", "ordinal", "()I", false));
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "root", "L" + PBM + ";"));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "itemQuads", "Ljava/util/Map;"));
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "root", "L" + PBM + ";"));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "quads", "Ljava/util/Map;"));
+        nb.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        nb.add(new FieldInsnNode(Opcodes.GETFIELD, PBM, "fixedMeta", "I"));
+        nb.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "com/modelport/ported/ItemFit", "fit",
+            "(Lorg/apache/commons/lang3/tuple/Pair;ILjava/util/Map;Ljava/util/Map;I)Lorg/apache/commons/lang3/tuple/Pair;", false));
+        nb.add(new InsnNode(Opcodes.ARETURN));
+        hp.instructions.add(nb);
+        count++;
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         cn.accept(cw);
         return cw.toByteArray();
@@ -271,7 +300,7 @@ public class Patch {
                 }
             }
         }
-        if (count != 8) throw new IllegalStateException("patches " + count);
+        if (count != 9) throw new IllegalStateException("patches " + count);
         System.out.println("patched ok: " + count + " patch points");
     }
 }
