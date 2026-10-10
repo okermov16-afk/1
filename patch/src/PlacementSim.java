@@ -48,6 +48,8 @@ public final class PlacementSim {
         int[] table = new int[24];
         boolean hung = false;
         boolean differs = false;
+        int fallbacks = 0;
+        int defaultMeta = -2;
         try {
             for (EnumFacing face : EnumFacing.values()) {
                 for (int i = 0; i < 4; ++i) {
@@ -55,11 +57,12 @@ public final class PlacementSim {
                     player.field_70759_as = YAWS[i];
                     player.field_70126_B = YAWS[i];
                     player.field_70125_A = 0.0f;
+                    // -1: the call threw (the block refuses this face), -2: meta not representable
                     int oldMeta = -1;
-                    IBlockState state = null;
                     try {
-                        state = block.getStateForPlacement((World) realWorld, pos, face, 0.5f, 0.5f, 0.5f, 0, (EntityLivingBase) player, EnumHand.MAIN_HAND);
-                        oldMeta = block.func_176201_c(state);
+                        IBlockState state = block.getStateForPlacement((World) realWorld, pos, face, 0.5f, 0.5f, 0.5f, 0, (EntityLivingBase) player, EnumHand.MAIN_HAND);
+                        int m = block.func_176201_c(state);
+                        oldMeta = m < 0 || m > 15 ? -2 : m;
                     } catch (Throwable t) {
                         oldMeta = -1;
                     }
@@ -81,13 +84,28 @@ public final class PlacementSim {
                             meta = sim;
                         }
                     }
-                    if (meta < 0 || meta > 15) {
+                    if (meta == -2) {
                         return null;
+                    }
+                    if (meta == -1) {
+                        // Wall/side blocks refuse some faces (HBTM doorbell throws for UP/DOWN) and in game
+                        // those clicks never reach getStateForPlacement. Keep the other faces: use the default state.
+                        if (defaultMeta == -2) {
+                            defaultMeta = defaultMetaOf(block);
+                        }
+                        if (defaultMeta < 0) {
+                            return null;
+                        }
+                        meta = defaultMeta;
+                        ++fallbacks;
                     }
                     table[face.func_176745_a() * 4 + i] = meta;
                 }
             }
-            if (differs) {
+            if (fallbacks >= 24) {
+                return null;
+            }
+            if (differs || fallbacks > 0) {
                 ++changed;
                 try {
                     ModelPort.LOG.info("modelport: таблица установки {} дополнена результатом onBlockPlacedBy", (Object) block.getRegistryName());
@@ -98,6 +116,15 @@ public final class PlacementSim {
             return table;
         } catch (Throwable t) {
             return null;
+        }
+    }
+
+    private static int defaultMetaOf(Block block) {
+        try {
+            int m = block.func_176201_c(block.func_176223_P());
+            return m < 0 || m > 15 ? -1 : m;
+        } catch (Throwable t) {
+            return -1;
         }
     }
 

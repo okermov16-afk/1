@@ -63,4 +63,20 @@ public class MiniMC {
             return new St(this, func_176198_a(w, p, f) ? f.func_176734_d().hIndex() : 2);
         }
     }
+
+    /** exact logic of HBTM BlockDoorbell/BlockLightSwitch: FACING = face.getOpposite(), which throws for UP/DOWN */
+    public static class HbtmLike extends Block {
+        public HbtmLike() { name = "t:hbtm"; defaultState = new St(this, 2); }
+        public IBlockState getStateForPlacement(World w, BlockPos p, EnumFacing f, float x, float y, float z, int m, EntityLivingBase pl, EnumHand h) {
+            if (f.func_176745_a() < 2) throw new IllegalArgumentException("Cannot set property facing to " + f.func_176745_a());
+            return new St(this, f.func_176734_d().func_176745_a());
+        }
+        public int func_176201_c(IBlockState s) { return ((St) s).facing; }
+    }
+    /** refuses every face */
+    public static class AlwaysThrows extends Block {
+        public AlwaysThrows() { name = "t:never"; defaultState = new St(this, 2); }
+        public IBlockState getStateForPlacement(World w, BlockPos p, EnumFacing f, float x, float y, float z, int m, EntityLivingBase pl, EnumHand h) { throw new IllegalStateException("no"); }
+        public int func_176201_c(IBlockState s) { return ((St) s).facing; }
+    }
 }
