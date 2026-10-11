@@ -46,9 +46,9 @@ class App(tk.Tk):
         opts = ttk.Frame(self, padding=(8, 4))
         opts.pack(fill="x")
         ttk.Label(opts, text="Строгость отсева похожих (выше — меньше слайдов):").pack(side="left")
-        self.sim = tk.DoubleVar(value=0.80)
-        ttk.Scale(opts, from_=0.5, to=0.95, variable=self.sim, length=200).pack(side="left", padx=8)
-        self.sim_lbl = ttk.Label(opts, text="80%", width=5)
+        self.sim = tk.DoubleVar(value=0.85)
+        ttk.Scale(opts, from_=0.6, to=0.97, variable=self.sim, length=200).pack(side="left", padx=8)
+        self.sim_lbl = ttk.Label(opts, text="85%", width=5)
         self.sim_lbl.pack(side="left")
         self.sim.trace_add("write", lambda *a: self.sim_lbl.config(text=f"{int(self.sim.get() * 100)}%"))
 
