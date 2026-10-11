@@ -9,9 +9,10 @@ import cv2
 import numpy as np
 
 SAMPLE_SEC = 0.5      # шаг выборки кадров
-STABLE_DIFF = 0.01    # кадр «устоялся», если почти не отличается от предыдущей выборки
+STABLE_DIFF = 0.03    # кадр «устоялся», если почти не отличается от предыдущей выборки
 CMP_SIZE = (160, 90)  # размер для проверки стабильности
 INK_SIZE = (640, 360)  # размер для сравнения слайдов
+DIFF_TOL = 0.003      # слайды разные, если сильно отличается больше 0.3% площади кадра
 
 
 def short_path(path: str) -> str:
@@ -45,45 +46,21 @@ def changed_fraction(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.mean(cv2.absdiff(a, b) > 25))
 
 
-BLOCK = 20
-
-
 def ink(gray: np.ndarray):
-    """Слайд как набор блоков: нормированные патчи + маска блоков, где есть содержимое."""
-    g = cv2.GaussianBlur(cv2.resize(gray, INK_SIZE, interpolation=cv2.INTER_AREA), (3, 3), 0)
-    g = g.astype(np.float32)
-    h, w = g.shape
-    rows, cols = h // BLOCK, w // BLOCK
-    p = g[:rows * BLOCK, :cols * BLOCK].reshape(rows, BLOCK, cols, BLOCK).swapaxes(1, 2)
-    p = p.reshape(rows * cols, BLOCK * BLOCK)
-    p = p - p.mean(axis=1, keepdims=True)
-    norm = np.linalg.norm(p, axis=1)
-    has = norm > 8 * BLOCK  # контраст блока (std > ~8)
-    p = np.where(has[:, None], p / np.maximum(norm, 1e-6)[:, None], 0).astype(np.float32)
-    return p, has
+    """Слайд в виде небольшой сглаженной картинки для попиксельного сравнения."""
+    g = cv2.resize(gray, INK_SIZE, interpolation=cv2.INTER_AREA)
+    return cv2.GaussianBlur(g, (3, 3), 0)
 
 
-def _cover(a, b) -> float:
-    """Какая доля содержательных блоков a совпадает с тем же блоком в b."""
-    (pa, ha), (pb, hb) = a, b
-    n = int(ha.sum())
-    if n == 0:
-        return 1.0
-    corr = (pa[ha] * pb[ha]).sum(axis=1)
-    return float(np.count_nonzero((corr > 0.8) & hb[ha])) / n
+def diff_area(a, b) -> float:
+    """Доля площади кадра, где картинки заметно отличаются."""
+    return float(np.mean(cv2.absdiff(a, b) > 50))
 
 
-def same_slide(a, b, similarity: float) -> bool:
-    """Слайды совпадают, если содержимое почти всех блоков одинаково,
-    либо один — «достроенная» версия другого."""
-    na, nb = int(a[1].sum()), int(b[1].sum())
-    if na == 0 or nb == 0:
-        return na == nb
-    ab, ba = _cover(a, b), _cover(b, a)
-    if min(ab, ba) >= similarity:
-        return True
-    small_cov = ab if na <= nb else ba
-    return small_cov >= 0.96 and max(na, nb) >= 1.15 * min(na, nb)
+def same_slide(a, b, tol: float) -> bool:
+    """Дубль — только если отличается меньше tol площади (курсор, шум сжатия).
+    Другой текст, цифра в заголовке, новая строка — это уже другой слайд."""
+    return diff_area(a, b) <= tol
 
 
 def text_score(gray: np.ndarray) -> int:
@@ -104,7 +81,7 @@ def text_score(gray: np.ndarray) -> int:
 
 def _scan_segment(args):
     """Обрабатывает кадры [start, end) (кратные step). Возвращает кандидатов по порядку времени."""
-    video, roi, start, end, step, similarity, min_chars = args
+    video, roi, start, end, step, tol, min_chars = args
     fps = cv2.VideoCapture(short_path(str(video))).get(cv2.CAP_PROP_FPS) or 25.0
     cap = cv2.VideoCapture(short_path(str(video)))
     x, y, w, h = roi
@@ -128,18 +105,18 @@ def _scan_segment(args):
                         stable = prev is not None and changed_fraction(sm, prev) < STABLE_DIFF
                         prev = sm
                         if stable and idx >= start:
-                            _consider(kept, crop, gray, similarity, min_chars, idx / fps, log)
+                            _consider(kept, crop, gray, tol, min_chars, idx / fps, log)
             idx += 1
     finally:
         cap.release()
     return kept, log
 
 
-def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
+def extract_slides(video, roi, out_dir=None, tol=DIFF_TOL, min_chars=8,
                    progress=None, cancel=None, workers=None, start_frame=0, end_frame=None):
     """
-    video: путь; roi: (x, y, w, h) в пикселях видео; similarity: степень совпадения
-    содержимого (0..1), с которой слайды считаются «одинаковыми».
+    video: путь; roi: (x, y, w, h) в пикселях видео; tol: доля площади кадра, при отличии больше которой
+    слайды считаются разными (курсор/шум меньше этого порога).
     Видео режется на куски, они обрабатываются параллельно, результат собирается
     строго в порядке времени. Возвращает (папка, число сохранённых слайдов).
     """
@@ -171,7 +148,7 @@ def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
     n_seg = min(max(workers * 4, 1), max(1, span // (step * 10)))
     seg_len = -(-span // n_seg)
     seg_len = -(-seg_len // step) * step
-    tasks = [(video, roi, s, min(s + seg_len, end), step, similarity, min_chars)
+    tasks = [(video, roi, s, min(s + seg_len, end), step, tol, min_chars)
              for s in range(begin, end, seg_len)]
 
     kept, log = [], []
@@ -188,7 +165,7 @@ def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
             if cancel and cancel():
                 break
             for c in seg:  # слияние и удаление дублей на стыках
-                _merge(kept, c, similarity)
+                _merge(kept, c, tol)
             done += 1
             if progress:
                 progress(done / len(tasks), len(kept))
@@ -215,27 +192,22 @@ def _ts(t):
     return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
 
 
-def _merge(kept, c, similarity):
+def _merge(kept, c, tol):
     for s in kept:
-        if same_slide(c["mask"], s["mask"], similarity):
-            if c["score"] > s["score"]:
-                s.update(c)
-            return
+        if same_slide(c["mask"], s["mask"], tol):
+            return  # уже есть такой слайд (раньше по времени)
     kept.append(c)
 
 
-def _consider(kept, crop, gray, similarity, min_chars, t, log):
+def _consider(kept, crop, gray, tol, min_chars, t, log):
     score = text_score(gray)
     if score < min_chars:
-        if score >= 3:  # почти текст — пригодится для отладки
+        if score >= 3:
             log.append((t, f"мало символов ({score} < {min_chars})"))
         return
     mask = ink(gray)
-    for n, s in enumerate(kept, 1):
-        if same_slide(mask, s["mask"], similarity):
-            # тот же слайд: оставляем версию с большим количеством текста
-            if score > s["score"]:
-                s.update(mask=mask, score=score, frame=crop.copy())
-            log.append((t, "похож на уже найденный слайд"))
+    for n, s in enumerate(kept):
+        if same_slide(mask, s["mask"], tol):
+            log.append((t, f"копия слайда, найденного в {_ts(s['t'])}"))
             return
     kept.append({"mask": mask, "score": score, "frame": crop.copy(), "t": t})

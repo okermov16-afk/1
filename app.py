@@ -48,12 +48,12 @@ class App(tk.Tk):
 
         opts = ttk.Frame(self, padding=(8, 4))
         opts.pack(fill="x")
-        ttk.Label(opts, text="Строгость отсева похожих (выше — меньше слайдов):").pack(side="left")
-        self.sim = tk.DoubleVar(value=0.85)
-        ttk.Scale(opts, from_=0.6, to=0.97, variable=self.sim, length=200).pack(side="left", padx=8)
-        self.sim_lbl = ttk.Label(opts, text="85%", width=5)
+        ttk.Label(opts, text="Слайды разные, если отличается больше:").pack(side="left")
+        self.sim = tk.DoubleVar(value=0.3)
+        ttk.Scale(opts, from_=0.05, to=2.0, variable=self.sim, length=200).pack(side="left", padx=8)
+        self.sim_lbl = ttk.Label(opts, text="0.30% кадра", width=12)
         self.sim_lbl.pack(side="left")
-        self.sim.trace_add("write", lambda *a: self.sim_lbl.config(text=f"{int(self.sim.get() * 100)}%"))
+        self.sim.trace_add("write", lambda *a: self.sim_lbl.config(text=f"{self.sim.get():.2f}% кадра"))
 
         bot = ttk.Frame(self, padding=8)
         bot.pack(fill="x")
@@ -194,7 +194,7 @@ class App(tk.Tk):
         self.go_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self.bar["value"] = 0
-        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get(), self.frame_of(self.start_var.get()), self.frame_of(self.end_var.get())), daemon=True)
+        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get() / 100.0, self.frame_of(self.start_var.get()), self.frame_of(self.end_var.get())), daemon=True)
         self.worker.start()
 
     def stop(self):
@@ -203,7 +203,7 @@ class App(tk.Tk):
     def run(self, roi, sim, start_f, end_f):
         try:
             folder, n = slides.extract_slides(
-                self.video, roi, similarity=sim, start_frame=start_f, end_frame=end_f,
+                self.video, roi, tol=sim, start_frame=start_f, end_frame=end_f,
                 progress=lambda p, k: self.after(0, self.update_progress, p, k),
                 cancel=lambda: self.cancel_flag)
             self.after(0, self.done, folder, n, None)
