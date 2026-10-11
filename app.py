@@ -22,6 +22,10 @@ class App(tk.Tk):
         self.scale = 1.0
         self.offset = (0, 0)
         self.rect = None         # (x0, y0, x1, y1) в координатах canvas
+        self.pcap = None         # постоянный захват для предпросмотра
+        self.fps = 25.0
+        self.cap_total = 1
+        self._seek_job = None
         self.cancel_flag = False
         self.worker = None
         self._photo = None
@@ -37,21 +41,10 @@ class App(tk.Tk):
         self.canvas.bind("<ButtonPress-1>", self.on_press)
         self.canvas.bind("<B1-Motion>", self.on_drag)
 
-        seek = ttk.Frame(self, padding=(8, 4))
-        seek.pack(fill="x")
-        ttk.Label(seek, text="Позиция:").pack(side="left")
-        self.seek = ttk.Scale(seek, from_=0, to=1, command=self.on_seek)
-        self.seek.pack(side="left", fill="x", expand=True, padx=8)
-        self.pos_lbl = ttk.Label(seek, text="0:00:00", width=8)
-        self.pos_lbl.pack(side="left")
-
-        rng = ttk.Frame(self, padding=(8, 0))
-        rng.pack(fill="x")
-        ttk.Button(rng, text="Начало отсюда", command=self.set_start).pack(side="left")
-        ttk.Button(rng, text="Конец здесь", command=self.set_end).pack(side="left", padx=6)
-        ttk.Button(rng, text="Всё видео", command=self.reset_range).pack(side="left")
-        self.range_lbl = ttk.Label(rng, text="Обрабатывается всё видео")
-        self.range_lbl.pack(side="left", padx=10)
+        self.start_var = tk.DoubleVar(value=0.0)
+        self.end_var = tk.DoubleVar(value=1.0)
+        self.start_lbl = self._slider_row("Начало:", self.start_var, lambda v: self.on_slider("start"))
+        self.end_lbl = self._slider_row("Конец:   ", self.end_var, lambda v: self.on_slider("end"))
 
         opts = ttk.Frame(self, padding=(8, 4))
         opts.pack(fill="x")
@@ -73,6 +66,15 @@ class App(tk.Tk):
         self.status = ttk.Label(bot, text="Выберите видео и обведите рамкой презентацию")
         self.status.pack(side="left")
 
+    def _slider_row(self, text, var, cmd):
+        row = ttk.Frame(self, padding=(8, 2))
+        row.pack(fill="x")
+        ttk.Label(row, text=text, width=8).pack(side="left")
+        ttk.Scale(row, from_=0, to=1, variable=var, command=cmd).pack(side="left", fill="x", expand=True, padx=8)
+        lbl = ttk.Label(row, text="0:00:00", width=8)
+        lbl.pack(side="left")
+        return lbl
+
     # --- видео и рамка ---
     def open_video(self):
         p = filedialog.askopenfilename(title="Видео", filetypes=[
@@ -83,66 +85,58 @@ class App(tk.Tk):
         if not cap.isOpened():
             messagebox.showerror("Ошибка", "Не удалось открыть видео")
             return
+        if self.pcap:
+            self.pcap.release()
+        self.pcap = cap
         self.cap_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
         self.frame_size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
         self.fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-        cap.release()
-        self.start_f, self.end_f = 0, None
-        self.update_range_label()
         self.video = p
         self.path_lbl.config(text=p)
         self.rect = None
-        self.seek.set(0.1)
+        self.start_var.set(0.0)
+        self.end_var.set(1.0)
+        self.start_lbl.config(text=self.fmt(0))
+        self.end_lbl.config(text=self.fmt(self.cap_total - 1))
         self.show_frame(0.1)
 
-    def cur_frame(self):
-        return int(float(self.seek.get()) * (self.cap_total - 1))
+    def frame_of(self, v):
+        return int(v * (self.cap_total - 1))
 
     def fmt(self, f):
         t = int(f / self.fps)
         return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
 
-    def on_seek(self, v):
-        if self.video:
-            self.pos_lbl.config(text=self.fmt(self.cur_frame()))
-            if self._seek_job:
-                self.after_cancel(self._seek_job)
-            self._seek_job = self.after(80, lambda: self.show_frame(float(self.seek.get())))
-
-    def set_start(self):
-        if self.video:
-            self.start_f = self.cur_frame()
-            if self.end_f is not None and self.end_f <= self.start_f:
-                self.end_f = None
-            self.update_range_label()
-
-    def set_end(self):
-        if self.video:
-            f = self.cur_frame()
-            if f <= self.start_f:
-                return messagebox.showinfo("Slide Grabber", "Конец должен быть позже начала")
-            self.end_f = f
-            self.update_range_label()
-
-    def reset_range(self):
-        self.start_f, self.end_f = 0, None
-        if self.video:
-            self.update_range_label()
-
-    def update_range_label(self):
-        if self.start_f == 0 and self.end_f is None:
-            self.range_lbl.config(text="Обрабатывается всё видео")
-        else:
-            end = self.fmt(self.end_f) if self.end_f is not None else "конец видео"
-            self.range_lbl.config(text=f"Обработка: {self.fmt(self.start_f)} — {end}")
+    def on_slider(self, which):
+        if not self.video:
+            return
+        s, e = self.start_var.get(), self.end_var.get()
+        if which == "start" and s >= e:      # начало не может быть правее конца
+            s = max(0.0, e - 0.001)
+            self.start_var.set(s)
+        elif which == "end" and e <= s:
+            e = min(1.0, s + 0.001)
+            self.end_var.set(e)
+        self.start_lbl.config(text=self.fmt(self.frame_of(s)))
+        self.end_lbl.config(text=self.fmt(self.frame_of(e)))
+        pos = s if which == "start" else e
+        if self._seek_job:
+            self.after_cancel(self._seek_job)
+        self._seek_job = self.after(60, lambda: self.show_frame(pos))
 
     def show_frame(self, pos):
-        cap = cv2.VideoCapture(slides.short_path(self.video))
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(pos * (self.cap_total - 1)))
-        ok, frame = cap.read()
-        cap.release()
-        if not ok:
+        if not self.pcap:
             return
+        target = self.frame_of(pos)
+        frame = None
+        for back in (0, 15, 60, 150):  # если кадр не читается — берём чуть раньше
+            self.pcap.set(cv2.CAP_PROP_POS_FRAMES, max(0, target - back))
+            ok, f = self.pcap.read()
+            if ok:
+                frame = f
+                break
+        if frame is None:
+            return  # оставляем прежний кадр на экране
         fw, fh = self.frame_size
         self.scale = min(CANVAS_W / fw, CANVAS_H / fh)
         dw, dh = int(fw * self.scale), int(fh * self.scale)
@@ -200,7 +194,7 @@ class App(tk.Tk):
         self.go_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self.bar["value"] = 0
-        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get(), self.start_f, self.end_f), daemon=True)
+        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get(), self.frame_of(self.start_var.get()), self.frame_of(self.end_var.get())), daemon=True)
         self.worker.start()
 
     def stop(self):
