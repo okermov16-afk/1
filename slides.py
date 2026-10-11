@@ -2,6 +2,7 @@
 import os
 import sys
 import ctypes
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -79,37 +80,19 @@ def text_score(gray: np.ndarray) -> int:
     return cnt
 
 
-def extract_slides(video, roi, out_dir=None, similarity=0.80, min_chars=20,
-                   progress=None, cancel=None):
-    """
-    video: путь; roi: (x, y, w, h) в пикселях видео; similarity: степень совпадения
-    содержимого (0..1), с которой слайды считаются «одинаковыми».
-    Возвращает (папка, число сохранённых слайдов).
-    """
+def _scan_segment(args):
+    """Обрабатывает кадры [start, end) (кратные step). Возвращает кандидатов по порядку времени."""
+    video, roi, start, end, step, similarity, min_chars = args
     cap = cv2.VideoCapture(short_path(str(video)))
-    if not cap.isOpened():
-        raise RuntimeError("Не удалось открыть видео")
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-    step = max(1, int(round(fps * SAMPLE_SEC)))
     x, y, w, h = roi
-
-    name = Path(video).stem
-    base = Path(out_dir) if out_dir else desktop_dir()
-    folder = base / f"Слайды - {name}"
-    k = 2
-    while folder.exists():
-        folder = base / f"Слайды - {name} ({k})"
-        k += 1
-    folder.mkdir(parents=True)
-
-    kept = []  # {"small": ..., "score": int, "frame": ndarray}
-    prev = None
-    idx = 0
+    kept, prev = [], None
+    # один кадр до начала — чтобы на границе работала проверка «кадр устоялся»
+    first = max(0, start - step)
+    if first:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, first)
+    idx = first
     try:
-        while True:
-            if cancel and cancel():
-                break
+        while idx < end:
             if not cap.grab():
                 break
             if idx % step == 0:
@@ -121,14 +104,70 @@ def extract_slides(video, roi, out_dir=None, similarity=0.80, min_chars=20,
                         sm = small(gray)
                         stable = prev is not None and changed_fraction(sm, prev) < STABLE_DIFF
                         prev = sm
-                        if stable:
+                        if stable and idx >= start:
                             _consider(kept, crop, gray, similarity, min_chars)
-            if progress and total and idx % (step * 5) == 0:
-                progress(min(idx / total, 1.0), len(kept))
             idx += 1
     finally:
         cap.release()
+    return kept
 
+
+def extract_slides(video, roi, out_dir=None, similarity=0.80, min_chars=20,
+                   progress=None, cancel=None, workers=None):
+    """
+    video: путь; roi: (x, y, w, h) в пикселях видео; similarity: степень совпадения
+    содержимого (0..1), с которой слайды считаются «одинаковыми».
+    Видео режется на куски, они обрабатываются параллельно, результат собирается
+    строго в порядке времени. Возвращает (папка, число сохранённых слайдов).
+    """
+    cap = cv2.VideoCapture(short_path(str(video)))
+    if not cap.isOpened():
+        raise RuntimeError("Не удалось открыть видео")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    cap.release()
+    if total <= 0:
+        raise RuntimeError("Не удалось определить длину видео")
+    step = max(1, int(round(fps * SAMPLE_SEC)))
+    workers = workers or max(1, os.cpu_count() or 1)
+
+    name = Path(video).stem
+    base = Path(out_dir) if out_dir else desktop_dir()
+    folder = base / f"Слайды - {name}"
+    k = 2
+    while folder.exists():
+        folder = base / f"Слайды - {name} ({k})"
+        k += 1
+
+    # куски по границам, кратным step; кусков больше, чем процессов — для баланса и прогресса
+    n_seg = min(max(workers * 4, 1), max(1, total // (step * 10)))
+    seg_len = -(-total // n_seg)
+    seg_len = -(-seg_len // step) * step
+    tasks = [(video, roi, s, min(s + seg_len, total), step, similarity, min_chars)
+             for s in range(0, total, seg_len)]
+
+    kept = []
+    done = 0
+    if workers == 1 or len(tasks) == 1:
+        results = (_scan_segment(t) for t in tasks)
+        pool = None
+    else:
+        pool = ProcessPoolExecutor(max_workers=workers)
+        results = (f.result() for f in [pool.submit(_scan_segment, t) for t in tasks])
+    try:
+        for seg in results:  # строго по порядку кусков
+            if cancel and cancel():
+                break
+            for c in seg:  # слияние и удаление дублей на стыках
+                _merge(kept, c, similarity)
+            done += 1
+            if progress:
+                progress(done / len(tasks), len(kept))
+    finally:
+        if pool:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    folder.mkdir(parents=True)
     for n, s in enumerate(kept, 1):
         ok, buf = cv2.imencode(".png", s["frame"])
         if ok:
@@ -136,6 +175,15 @@ def extract_slides(video, roi, out_dir=None, similarity=0.80, min_chars=20,
     if progress:
         progress(1.0, len(kept))
     return folder, len(kept)
+
+
+def _merge(kept, c, similarity):
+    for s in kept:
+        if same_slide(c["mask"], s["mask"], similarity):
+            if c["score"] > s["score"]:
+                s.update(c)
+            return
+    kept.append(c)
 
 
 def _consider(kept, crop, gray, similarity, min_chars):

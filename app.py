@@ -1,4 +1,5 @@
 """Slide Grabber: выделяешь рамкой презентацию на видео — получаешь папку уникальных слайдов."""
+import multiprocessing
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -180,4 +181,5 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     App().mainloop()
