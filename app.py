@@ -42,6 +42,16 @@ class App(tk.Tk):
         ttk.Label(seek, text="Позиция:").pack(side="left")
         self.seek = ttk.Scale(seek, from_=0, to=1, command=self.on_seek)
         self.seek.pack(side="left", fill="x", expand=True, padx=8)
+        self.pos_lbl = ttk.Label(seek, text="0:00:00", width=8)
+        self.pos_lbl.pack(side="left")
+
+        rng = ttk.Frame(self, padding=(8, 0))
+        rng.pack(fill="x")
+        ttk.Button(rng, text="Начало отсюда", command=self.set_start).pack(side="left")
+        ttk.Button(rng, text="Конец здесь", command=self.set_end).pack(side="left", padx=6)
+        ttk.Button(rng, text="Всё видео", command=self.reset_range).pack(side="left")
+        self.range_lbl = ttk.Label(rng, text="Обрабатывается всё видео")
+        self.range_lbl.pack(side="left", padx=10)
 
         opts = ttk.Frame(self, padding=(8, 4))
         opts.pack(fill="x")
@@ -75,16 +85,56 @@ class App(tk.Tk):
             return
         self.cap_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
         self.frame_size = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        self.fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
         cap.release()
+        self.start_f, self.end_f = 0, None
+        self.update_range_label()
         self.video = p
         self.path_lbl.config(text=p)
         self.rect = None
         self.seek.set(0.1)
         self.show_frame(0.1)
 
+    def cur_frame(self):
+        return int(float(self.seek.get()) * (self.cap_total - 1))
+
+    def fmt(self, f):
+        t = int(f / self.fps)
+        return f"{t // 3600}:{t % 3600 // 60:02d}:{t % 60:02d}"
+
     def on_seek(self, v):
         if self.video:
-            self.show_frame(float(v))
+            self.pos_lbl.config(text=self.fmt(self.cur_frame()))
+            if self._seek_job:
+                self.after_cancel(self._seek_job)
+            self._seek_job = self.after(80, lambda: self.show_frame(float(self.seek.get())))
+
+    def set_start(self):
+        if self.video:
+            self.start_f = self.cur_frame()
+            if self.end_f is not None and self.end_f <= self.start_f:
+                self.end_f = None
+            self.update_range_label()
+
+    def set_end(self):
+        if self.video:
+            f = self.cur_frame()
+            if f <= self.start_f:
+                return messagebox.showinfo("Slide Grabber", "Конец должен быть позже начала")
+            self.end_f = f
+            self.update_range_label()
+
+    def reset_range(self):
+        self.start_f, self.end_f = 0, None
+        if self.video:
+            self.update_range_label()
+
+    def update_range_label(self):
+        if self.start_f == 0 and self.end_f is None:
+            self.range_lbl.config(text="Обрабатывается всё видео")
+        else:
+            end = self.fmt(self.end_f) if self.end_f is not None else "конец видео"
+            self.range_lbl.config(text=f"Обработка: {self.fmt(self.start_f)} — {end}")
 
     def show_frame(self, pos):
         cap = cv2.VideoCapture(slides.short_path(self.video))
@@ -150,16 +200,16 @@ class App(tk.Tk):
         self.go_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self.bar["value"] = 0
-        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get()), daemon=True)
+        self.worker = threading.Thread(target=self.run, args=(roi, self.sim.get(), self.start_f, self.end_f), daemon=True)
         self.worker.start()
 
     def stop(self):
         self.cancel_flag = True
 
-    def run(self, roi, sim):
+    def run(self, roi, sim, start_f, end_f):
         try:
             folder, n = slides.extract_slides(
-                self.video, roi, similarity=sim,
+                self.video, roi, similarity=sim, start_frame=start_f, end_frame=end_f,
                 progress=lambda p, k: self.after(0, self.update_progress, p, k),
                 cancel=lambda: self.cancel_flag)
             self.after(0, self.done, folder, n, None)

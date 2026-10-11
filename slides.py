@@ -136,7 +136,7 @@ def _scan_segment(args):
 
 
 def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
-                   progress=None, cancel=None, workers=None):
+                   progress=None, cancel=None, workers=None, start_frame=0, end_frame=None):
     """
     video: путь; roi: (x, y, w, h) в пикселях видео; similarity: степень совпадения
     содержимого (0..1), с которой слайды считаются «одинаковыми».
@@ -152,6 +152,10 @@ def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
     if total <= 0:
         raise RuntimeError("Не удалось определить длину видео")
     step = max(1, int(round(fps * SAMPLE_SEC)))
+    end = min(end_frame or total, total)
+    begin = -(-max(0, start_frame) // step) * step  # выровнять по сетке выборки
+    if end - begin < step:
+        raise RuntimeError("Слишком короткий отрезок: проверьте начало и конец")
     workers = workers or max(1, os.cpu_count() or 1)
 
     name = Path(video).stem
@@ -163,11 +167,12 @@ def extract_slides(video, roi, out_dir=None, similarity=0.85, min_chars=10,
         k += 1
 
     # куски по границам, кратным step; кусков больше, чем процессов — для баланса и прогресса
-    n_seg = min(max(workers * 4, 1), max(1, total // (step * 10)))
-    seg_len = -(-total // n_seg)
+    span = end - begin
+    n_seg = min(max(workers * 4, 1), max(1, span // (step * 10)))
+    seg_len = -(-span // n_seg)
     seg_len = -(-seg_len // step) * step
-    tasks = [(video, roi, s, min(s + seg_len, total), step, similarity, min_chars)
-             for s in range(0, total, seg_len)]
+    tasks = [(video, roi, s, min(s + seg_len, end), step, similarity, min_chars)
+             for s in range(begin, end, seg_len)]
 
     kept, log = [], []
     done = 0
