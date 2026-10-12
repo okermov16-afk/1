@@ -1,2 +1,3 @@
-key.nightvision.toggle=Night vision on/off
-key.categories.nightvision=Night Vision
+key.multi.nightvision=Night vision on/off
+key.multi.mute=Sound on/off
+key.categories.multi=Multi

@@ -1,18 +1,18 @@
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraftforge.fml.client.FMLClientHandler;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
-import nightvision.NightVision;
+import multi.Multi;
 
 public class Run {
     static int fails;
     static void check(boolean ok, String what) { System.out.println((ok ? "ok   " : "FAIL ") + what); if (!ok) fails++; }
-    static java.lang.reflect.Field f(String n) throws Exception { java.lang.reflect.Field x = NightVision.class.getDeclaredField(n); x.setAccessible(true); return x; }
+    static java.lang.reflect.Field f(String n) throws Exception { java.lang.reflect.Field x = Multi.class.getDeclaredField(n); x.setAccessible(true); return x; }
 
     public static void main(String[] a) throws Exception {
-        NightVision m = new NightVision();
+        Multi m = new Multi();
         m.init(null);
-        net.minecraft.client.settings.KeyBinding key = (net.minecraft.client.settings.KeyBinding) f("key").get(m);
-        check(key != null && net.minecraftforge.fml.client.registry.ClientRegistry.registered == 1, "key registered");
+        net.minecraft.client.settings.KeyBinding key = (net.minecraft.client.settings.KeyBinding) f("nvKey").get(m);
+        check(key != null && net.minecraftforge.fml.client.registry.ClientRegistry.registered == 2, "key registered");
         TickEvent.ClientTickEvent end = new TickEvent.ClientTickEvent(TickEvent.Phase.END);
         EntityPlayer p = new EntityPlayer();
         FMLClientHandler.player = null;
@@ -41,6 +41,23 @@ public class Run {
         TickEvent.ClientTickEvent start = new TickEvent.ClientTickEvent(TickEvent.Phase.START);
         key.presses = 1; m.onTick(start);
         check(key.presses == 1, "START phase ignored");
+        // --- mute (Page Down)
+        key.presses = 0;
+        net.minecraft.client.settings.KeyBinding mkey = (net.minecraft.client.settings.KeyBinding) f("muteKey").get(m);
+        net.minecraftforge.client.event.sound.PlaySoundEvent s1 = new net.minecraftforge.client.event.sound.PlaySoundEvent();
+        m.onSound(s1);
+        check(s1.result != null, "not muted: sound untouched");
+        p2.messages.clear();
+        mkey.presses = 1; m.onTick(end);
+        net.minecraftforge.client.event.sound.PlaySoundEvent s2 = new net.minecraftforge.client.event.sound.PlaySoundEvent();
+        m.onSound(s2);
+        check(s2.result == null, "Page Down -> new sounds cancelled");
+        check(p2.messages.size() == 1 && p2.messages.get(0).contains("\u0417\u0432\u0443\u043a: \u0412\u042b\u041a\u041b"), "message: sound OFF");
+        check(p2.effects.size() == 1, "night vision unaffected by mute");
+        mkey.presses = 1; m.onTick(end);
+        net.minecraftforge.client.event.sound.PlaySoundEvent s3 = new net.minecraftforge.client.event.sound.PlaySoundEvent();
+        m.onSound(s3);
+        check(s3.result != null, "Page Down again -> sound back");
         System.out.println(fails == 0 ? "ALL OK" : fails + " FAILED");
         System.exit(fails == 0 ? 0 : 1);
     }
