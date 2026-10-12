@@ -1,2 +1,2 @@
 package org.apache.logging.log4j;
-public interface Logger { void error(String m, Object... a); void error(String m, Throwable t); }
+public interface Logger { void error(String m, Object... a); void error(String m, Throwable t); void info(String m, Object... a); }

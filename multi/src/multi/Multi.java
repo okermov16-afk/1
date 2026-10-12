@@ -13,6 +13,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
+import org.lwjgl.input.Keyboard;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -22,7 +23,8 @@ import org.apache.logging.log4j.Logger;
  * <li><b>Delete</b> - night vision on/off.</li>
  * <li><b>Page Down</b> - all sound on/off.</li>
  * </ul>
- * Both are normal KeyBindings, so they can be rebound in Controls.
+ * Both are registered as KeyBindings (so they show up and can be rebound in Controls), but the keys are polled directly
+ * through LWJGL every client tick: that also works in the main menu, which KeyBinding.isPressed does not.
  * <p>
  * Everything that touches Minecraft's own (obfuscated in production) members goes through reflection with both the
  * MCP and the SRG name, so the jar works in a normal launcher and in a dev environment. Only Forge API members and
@@ -37,15 +39,16 @@ public class Multi {
     private static final int REFRESH = 20;
 
     private KeyBinding nvKey, muteKey;
-    private boolean nightVision;
-    private volatile boolean muted;
+    private boolean nightVision, prevNv, prevMute;
+    static volatile boolean muted;
     private int sinceRefresh;
     private Object lastPlayer;
 
     private Object potion;                // night_vision
     private Constructor<?> effectCtor;    // PotionEffect(Potion,int,int,boolean,boolean)
     private Object clientHandler;         // FMLClientHandler
-    private Method getPlayer, isPressed;
+    private Method getPlayer, getKeyCode, getMc;
+    private java.lang.reflect.Field screenField;
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent e) {
@@ -59,13 +62,32 @@ public class Multi {
             Class<?> fch = Class.forName("net.minecraftforge.fml.client.FMLClientHandler");
             clientHandler = fch.getMethod("instance").invoke(null);
             getPlayer = find(fch, null, 0, "getClientPlayerEntity");
-            isPressed = find(KeyBinding.class, null, 0, "isPressed", "func_151468_f");
-            potion = lookupPotion();
-            Class<?> potionCls = Class.forName("net.minecraft.potion.Potion");
-            effectCtor = Class.forName("net.minecraft.potion.PotionEffect")
-                    .getConstructor(potionCls, int.class, int.class, boolean.class, boolean.class);
-            if (getPlayer == null || isPressed == null || potion == null)
-                LOG.error("multi: unresolved getPlayer={} isPressed={} potion={}", getPlayer, isPressed, potion);
+            getKeyCode = find(KeyBinding.class, null, 0, "getKeyCode", "func_151463_i");
+            try {
+                potion = lookupPotion();
+                Class<?> potionCls = Class.forName("net.minecraft.potion.Potion");
+                effectCtor = Class.forName("net.minecraft.potion.PotionEffect")
+                        .getConstructor(potionCls, int.class, int.class, boolean.class, boolean.class);
+            } catch (Throwable t) {
+                LOG.error("multi: night vision unavailable", t);
+                potion = null;
+            }
+            try {   // the Minecraft instance and its open screen (so Delete does nothing while typing in chat)
+                Class<?> mc = Class.forName("net.minecraft.client.Minecraft");
+                getMc = find(mc, null, 0, "getMinecraft", "func_71410_x");
+                for (String n : new String[] {"currentScreen", "field_71462_r"}) {
+                    try { screenField = mc.getDeclaredField(n); screenField.setAccessible(true); break; } catch (NoSuchFieldException ignored) { }
+                }
+            } catch (Throwable t) {
+                LOG.error("multi: screen lookup failed", t);
+            }
+            try {   // separate handler object: if the sound event class is missing only the mute part is lost
+                MinecraftForge.EVENT_BUS.register(new Mute());
+            } catch (Throwable t) {
+                LOG.error("multi: mute handler not registered", t);
+            }
+            LOG.info("multi: ready (player={}, keyCode={}, nightVision={}, screen={}, delete={}, pagedown={})",
+                    getPlayer != null, getKeyCode != null, potion != null, screenField != null, KEY_DELETE, KEY_PAGE_DOWN);
         } catch (Throwable t) {
             LOG.error("multi: setup failed", t);
             nvKey = null;
@@ -73,42 +95,48 @@ public class Multi {
         }
     }
 
-    /** While muted every new sound (effects, music, ambient) is cancelled before it starts. */
-    @SubscribeEvent
-    public void onSound(PlaySoundEvent e) {
-        if (!muted) return;
-        try {
-            Method set = find(e.getClass(), null, 1, "setResultSound");
-            if (set != null) set.invoke(e, new Object[] {null});
-        } catch (Throwable t) {
-            LOG.error("multi: could not cancel a sound", t);
+    /** While muted every new sound (effects, music, ambient, also in the main menu) is cancelled before it starts. */
+    public static final class Mute {
+        @SubscribeEvent
+        public void onSound(PlaySoundEvent e) {
+            if (!muted) return;
+            try {
+                Method set = find(e.getClass(), null, 1, "setResultSound");
+                if (set != null) set.invoke(e, new Object[] {null});
+            } catch (Throwable t) {
+                LOG.error("multi: could not cancel a sound", t);
+            }
         }
     }
 
     @SubscribeEvent
     public void onTick(TickEvent.ClientTickEvent e) {
-        if (e.phase != TickEvent.Phase.END || nvKey == null || isPressed == null) return;
+        if (e.phase != TickEvent.Phase.END || nvKey == null) return;
         try {
             Object p = getPlayer == null ? null : getPlayer.invoke(clientHandler);
-            if (p == null) {   // presses made outside a world must not toggle later
-                lastPlayer = null;
-                while ((Boolean) isPressed.invoke(nvKey)) { }
-                while ((Boolean) isPressed.invoke(muteKey)) { }
-                return;
-            }
-            while ((Boolean) isPressed.invoke(muteKey)) {
+
+            boolean muteDown = down(muteKey, KEY_PAGE_DOWN);   // works in every screen, also the main menu
+            if (muteDown && !prevMute) {
                 muted = !muted;
                 if (muted) stopPlayingSounds();
-                message(p, muted ? "Звук: ВЫКЛ" : "Звук: ВКЛ");
+                if (p != null)
+                    message(p, muted ? "\u0417\u0432\u0443\u043a: \u0412\u042b\u041a\u041b" : "\u0417\u0432\u0443\u043a: \u0412\u041a\u041b");
             }
+            prevMute = muteDown;
+
+            boolean nvDown = down(nvKey, KEY_DELETE);
+            boolean nvEdge = nvDown && !prevNv;
+            prevNv = nvDown;
+            if (p == null) { lastPlayer = null; return; }
             if (potion == null) return;
+
             boolean changed = false;
-            while ((Boolean) isPressed.invoke(nvKey)) {
+            if (nvEdge && !screenOpen()) {
                 nightVision = !nightVision;
                 changed = true;
                 if (nightVision) apply(p); else clear(p);
-                message(p, nightVision ? "Ночное зрение: ВКЛ"
-                        : "Ночное зрение: ВЫКЛ");
+                message(p, nightVision ? "\u041d\u043e\u0447\u043d\u043e\u0435 \u0437\u0440\u0435\u043d\u0438\u0435: \u0412\u041a\u041b"
+                        : "\u041d\u043e\u0447\u043d\u043e\u0435 \u0437\u0440\u0435\u043d\u0438\u0435: \u0412\u042b\u041a\u041b");
             }
             if (!nightVision) { lastPlayer = p; return; }
             // a new player object (respawn, new world) has no effect yet
@@ -119,6 +147,17 @@ public class Multi {
             LOG.error("multi: tick failed, disabling", t);
             nvKey = null;
         }
+    }
+
+    /** Is the key (as currently bound in Controls, default if unreadable) held down right now? */
+    private boolean down(KeyBinding k, int dflt) throws Exception {
+        int code = getKeyCode == null ? dflt : (Integer) getKeyCode.invoke(k);
+        return code > 0 && Keyboard.isKeyDown(code);
+    }
+
+    private boolean screenOpen() throws Exception {
+        if (getMc == null || screenField == null) return false;
+        return screenField.get(getMc.invoke(null)) != null;
     }
 
     private void apply(Object player) throws Exception {
