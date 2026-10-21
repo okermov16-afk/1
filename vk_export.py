@@ -7,7 +7,7 @@
 
 Только стандартная библиотека Python 3.8+ (для скачивания видео нужен yt-dlp, необязательно).
 
-    python3 vk_export.py --token ВАШ_ТОКЕН --group manipulator_verse --out vk_backup
+    python3 vk_export.py     (спросит токен сам)
 
 Токен: пользовательский (админа группы), права: wall,photos,video,docs,groups,market,offline
 Можно передать через переменную окружения VK_TOKEN. Повторный запуск докачивает недостающее.
@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 import traceback
 import urllib.error
@@ -310,14 +311,16 @@ class Exporter:
 
     def video_download(self):
         self.save_json("videos.json", self.videos)
-        exe = shutil.which("yt-dlp") or shutil.which("yt_dlp")
+        exe = shutil.which("yt-dlp")
+        cmd = [exe] if exe else ([sys.executable, "-m", "yt_dlp"] if subprocess.run([sys.executable, "-m", "yt_dlp", "--version"], capture_output=True).returncode == 0 else None)
+        exe = cmd
         body = ""
         for key, v in self.videos.items():
             local = None
             if exe:
                 os.makedirs(os.path.join(self.out, "videos"), exist_ok=True)
                 print(f"    видео {v['title']}")
-                subprocess.run([exe, "-q", "--no-warnings", "-o", os.path.join(self.out, "videos", f"{key}.%(ext)s"), v["url"]])
+                subprocess.run([*exe, "-q", "--no-warnings", "-o", os.path.join(self.out, "videos", f"{key}.%(ext)s"), v["url"]])
                 found = [f for f in os.listdir(os.path.join(self.out, "videos")) if f.startswith(key + ".")]
                 local = f"videos/{found[0]}" if found else None
             link = f'<a href="{local}">▶ файл</a> · ' if local else ""
@@ -342,10 +345,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--token", default=os.environ.get("VK_TOKEN"))
     ap.add_argument("--group", default="manipulator_verse")
-    ap.add_argument("--out", default="vk_backup")
+    ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "vk_backup"))
     a = ap.parse_args()
-    if not a.token:
-        ap.error("нужен --token или переменная VK_TOKEN")
+    token = a.token or input("Вставьте токен (или всю ссылку целиком) и нажмите Enter: ").strip()
+    if "access_token=" in token:  # можно вставить ссылку целиком
+        token = urllib.parse.parse_qs(token.split("#", 1)[-1])["access_token"][0]
+    a.token = token
+    if not shutil.which("yt-dlp"):  # для скачивания видео
+        print("Ставлю yt-dlp для видео...")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
 
     ex = Exporter(VK(a.token), a.out, a.group)
     ex.about()
@@ -366,6 +374,7 @@ def main():
         print("Не удалось выгрузить (скорее всего, нет прав у токена или раздел отключён):")
         for f in failed:
             print("  -", f)
+    input("\nНажмите Enter, чтобы закрыть окно...")
 
 
 if __name__ == "__main__":
