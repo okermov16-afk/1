@@ -56,6 +56,7 @@ class VK:
                 continue
             if "error" in resp:
                 if resp["error"].get("error_code") in (6, 9, 10):
+                    print(f"    VK ответил: {resp['error'].get('error_msg')} (код {resp['error'].get('error_code')}), повтор {attempt + 1}/6...", flush=True)
                     time.sleep(2 ** attempt)
                     continue
                 raise RuntimeError(f"{method}: {resp['error'].get('error_msg')}")
@@ -178,9 +179,20 @@ class Exporter:
 
     # ---------- этапы ----------
     def about(self):
-        fields = "description,cover,members_count,contacts,links,site,status,activity,city,country,photo_max_orig,wiki_page,menu"
-        r = self.vk.call("groups.getById", group_id=self.group, fields=fields)
-        g = (r.get("groups") if isinstance(r, dict) else r)[0]
+        full = "description,cover,members_count,contacts,links,site,status,activity,city,country,photo_max_orig"
+        g = None
+        for kw in ({"group_id": self.group, "fields": full},
+                   {"group_id": self.group, "fields": "description,cover,members_count,photo_max_orig,status"},
+                   {"group_ids": self.group, "fields": "description,photo_200"},
+                   {"group_id": self.group}):
+            try:
+                r = self.vk.call("groups.getById", **kw)
+                g = (r.get("groups") if isinstance(r, dict) else r)[0]
+                break
+            except RuntimeError as e:
+                print("    пробую упрощённый запрос:", e, flush=True)
+        if g is None:
+            raise RuntimeError("не удалось получить данные группы")
         self.gid, self.owner, self.title = g["id"], -g["id"], g["name"]
         self.names[self.owner] = g["name"]
         self.save_json("group.json", g)
