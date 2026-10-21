@@ -26,7 +26,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
-API = "https://api.vk.com/method/"
+HOSTS = ["https://api.vk.ru/method/", "https://api.vk.com/method/"]
 V = "5.199"
 
 
@@ -42,15 +42,17 @@ class VK:
         params.update(access_token=self.token, v=V)
         data = urllib.parse.urlencode(params).encode()
         for attempt in range(6):
+            host = HOSTS[attempt % len(HOSTS)]
             wait = 0.36 - (time.time() - self.last)  # лимит ~3 запроса/сек
             if wait > 0:
                 time.sleep(wait)
             self.last = time.time()
             try:
-                with urllib.request.urlopen(API + method, data=data, timeout=60) as r:
+                with urllib.request.urlopen(host + method, data=data, timeout=60) as r:
                     resp = json.load(r)
-            except (urllib.error.URLError, TimeoutError, ValueError):
-                time.sleep(2 ** attempt)
+            except (urllib.error.URLError, TimeoutError, ValueError) as e:
+                print(f"    нет связи с {host} ({e}), повтор {attempt + 1}/6...", flush=True)
+                time.sleep(2 ** attempt if attempt > 1 else 1)
                 continue
             if "error" in resp:
                 if resp["error"].get("error_code") in (6, 9, 10):
@@ -355,8 +357,14 @@ def main():
         print("Ставлю yt-dlp для видео...")
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
 
+    print("Подключаюсь к VK...", flush=True)
     ex = Exporter(VK(a.token), a.out, a.group)
-    ex.about()
+    try:
+        ex.about()
+    except Exception as e:
+        print("\nОШИБКА:", e)
+        input("Нажмите Enter, чтобы закрыть окно...")
+        return
     steps = [("Альбомы и аватарки", ex.albums), ("Посты и комментарии", ex.wall),
              ("Обсуждения", ex.board), ("Документы", ex.docs), ("Список видео", ex.video_list),
              ("Подписчики", ex.members), ("Товары", ex.market), ("Видео (файлы)", ex.video_download)]
